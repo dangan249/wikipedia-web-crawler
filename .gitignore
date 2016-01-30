@@ -1,0 +1,11 @@
+# Mac finder artifacts
+.DS_Store
+
+target/*
+
+# Ignore Intellij project files
+.idea
+*.iml
+downloaded/*
+
+	
