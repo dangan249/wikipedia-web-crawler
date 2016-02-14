@@ -27,12 +27,8 @@ Crawler should be able to consume two arguments: a URL and a keyword to be
 matched against text, anchor text, or text within a URL. Starting with the same seed
 in Task 1, crawl to depth 5 at most, using the keyword “solar”. Crawler return at
 most 1000 URLS for each of the following:
-
 * Breadth first crawling
-* Depth first crawling*
-* In a few sentences compare and explain the approaches above. Briefly
-compare the results obtained in A & B in this task in terms of the total
-number of URLs crawled, and the top 5 URLs (topical content).
+* Depth first crawling
 
 ## Link Analysis and PageRank Implementation
 ```
