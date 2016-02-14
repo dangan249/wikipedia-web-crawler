@@ -1,3 +1,8 @@
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.LinkedHashMultimap;
+import com.google.common.collect.Multimap;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
@@ -10,33 +15,33 @@ import org.jsoup.select.Elements;
 import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.Set;
+import java.util.*;
 
 public class Crawler {
 	public static final URI SEED_URI = URI.create("http://en.wikipedia.org/wiki/Sustainable_energy");
 	public static final int MAX_DEPTH = 5;
 	public static final int MAX_URLS_NUM = 1000;
 
-	private static final int POLITENESS_DELAY = 1;
+	private static final int POLITENESS_DELAY = 1000;
 	private static final String BASE_URL = "http://en.wikipedia.org/";
-	private static final String ENGLISH_WIKI_LINK_PREFIX = "http://en.wikipedia.org/wiki";
+	private static final String ENGLISH_WIKI_LINK_PREFIX = "http://en.wikipedia.org/wiki/";
 
 	// set savePageToDisk to true to download matched pages to disk
 	public void crawl(URI seedURI, boolean savePageToDisk) throws IOException, InterruptedException {
 		Document seedPage = getPage(seedURI);
-		LinkedList<URI> frontier = new LinkedList<URI>(getValidUniqueUris(seedPage));
-
+		Set<URI> seedPageOutLinks = getValidUniqueUris(seedPage);
+		LinkedList<URI> frontier = new LinkedList<URI>(seedPageOutLinks);
 		// visitedURIs and matchedURIs are the same for generic Crawler class; but subclasses can override isMatchedPage
 		// to be more selective in saving pages to disk (Example: only save page that has contents match some certain keywords)
 		Set<URI> visitedURIs = new HashSet<URI>();
 		Set<URI> matchedURIs = new LinkedHashSet<URI>();
+		Multimap<String, String> inLinkMap = LinkedHashMultimap.create();
 
 		if (isMatchedPage(seedPage, seedURI)) {
 			if (savePageToDisk) savePage(seedPage, seedURI);
 			matchedURIs.add(seedURI);
+
+			updateInLinkMap(seedURI, seedPageOutLinks, inLinkMap);
 		}
 
 		visitedURIs.add(seedURI);
@@ -55,17 +60,16 @@ public class Crawler {
 			}
 
 			Document currentPage = getPage(currentUri);
+			// find more URIs to crawl
+			Set<URI> currentPageOutLinks = getValidUniqueUris(currentPage);
 
 			// check if this page match our interest
 			if (isMatchedPage(currentPage, currentUri)) {
 				if (savePageToDisk) savePage(currentPage, currentUri);
 				matchedURIs.add(currentUri);
-			}
 
-			// find more URIs to crawl
-			Set<URI> pageURIs = getValidUniqueUris(currentPage);
-			frontier.addAll(pageURIs);
-			nextTimeToIncreaseDepth += pageURIs.size();
+				updateInLinkMap(currentUri, currentPageOutLinks, inLinkMap);
+			}
 
 			// bookkeeping
 			visitedURIs.add(currentUri);
@@ -73,6 +77,8 @@ public class Crawler {
 				System.out.println("Num page visited: " + visitedURIs.size());
 			}
 
+			frontier.addAll(currentPageOutLinks);
+			nextTimeToIncreaseDepth += currentPageOutLinks.size();
 			// codes to keep track of current depth
 			timeToIncreaseDepth--;
 			if (timeToIncreaseDepth == 0) {
@@ -83,8 +89,10 @@ public class Crawler {
 			}
 
 			// respect the politeness policy
-			Thread.sleep(1000);
+			Thread.sleep(POLITENESS_DELAY);
 		}
+
+		saveInLinkMap(inLinkMap);
 		saveURIsToFile(matchedURIs);
 	}
 
@@ -127,15 +135,51 @@ public class Crawler {
 	public void saveURIsToFile(Set<URI> uris) {
 		StringBuilder stringBuilder = new StringBuilder();
 		for(URI uri: uris) {
-			stringBuilder.append(uri.toString());
+			stringBuilder.append(getTitle(uri));
 			stringBuilder.append("\n");
 		}
 
 		saveStringToFile(stringBuilder.toString(), "visited_urls.txt");
 	}
 
+	private void saveInLinkMap(Multimap<String, String> inlinkMap) {
+		saveMap(inlinkMap, "in_linked_graph.txt");
+	}
+
+	private void saveMap(Multimap<String, String> map, String fileName) {
+		StringBuilder stringBuilder = new StringBuilder();
+		for(String key: map.keys()) {
+			stringBuilder.append(key);
+			stringBuilder.append(" ");
+			stringBuilder.append(Joiner.on(" ").join(map.get(key)));
+			stringBuilder.append("\n");
+		}
+
+		saveStringToFile(stringBuilder.toString(), fileName);
+	}
+
+	private void updateOutLinkMap(URI source, Set<URI> outLinks, Multimap<String, String> outLinkMap) {
+		String sourceTitle = getTitle(source);
+		outLinkMap.putAll(sourceTitle, Iterables.transform(outLinks, new Function<URI, String>() {
+			public String apply(URI uri) {
+				return uri.toString();
+			}
+		}));
+	}
+
+	private void updateInLinkMap(URI source, Set<URI> outLinks, Multimap<String, String> inLinkMap) {
+		String sourceTitle = getTitle(source);
+		for(URI uri : outLinks) {
+			inLinkMap.put(getTitle(uri), sourceTitle);
+		}
+	}
+
 	private void savePage(Document page, URI uri) throws FileNotFoundException {
-		saveStringToFile(page.html(), "/Users/andang/IdeaProjects/web-crawler/downloaded/" + uri.toString().replace(ENGLISH_WIKI_LINK_PREFIX, "") + ".html");
+		saveStringToFile(page.html(), "/Users/andang/IdeaProjects/6200/hw1-partA/web-crawler/downloaded/" + uri.toString().replace(ENGLISH_WIKI_LINK_PREFIX, "") + ".html");
+	}
+
+	private String getTitle(URI uri) {
+		return uri.toString().replace(ENGLISH_WIKI_LINK_PREFIX, "");
 	}
 
 	private void saveStringToFile(String str, String filePath) {
@@ -178,7 +222,7 @@ public class Crawler {
 	public static void main(String [] args) {
 		Crawler crawler = new Crawler();
 		try {
-			crawler.crawl(SEED_URI, true);
+			crawler.crawl(SEED_URI, false);
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (InterruptedException e) {
