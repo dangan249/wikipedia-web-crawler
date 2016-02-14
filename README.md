@@ -1,6 +1,6 @@
 # wikipedia-web-crawler
 
-## Web-Crawler + Focus Crawler 
+## Web-Crawler + Focused Crawler 
 
 #### Crawling the documents:
 
